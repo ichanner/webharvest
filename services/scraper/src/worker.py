@@ -1,17 +1,3 @@
-"""Background scheduler — runs as its own container.
-
-Standard DevOps API/worker split: the scraper API container handles HTTP
-requests and writes source/cron config to Postgres. This worker container
-reads that config, owns an APScheduler, and fires `run_source` jobs on each
-source's per-source cron. Both containers share the same image; only the
-entrypoint differs (compose's `command:` override).
-
-Reconciliation: every 30 seconds we pull all sources from Postgres and sync
-the scheduler's job set. Add new sources, remove deleted ones, replace cron
-expressions on changed ones. So a UI cron edit propagates to the worker
-within at most 30s — no inter-process notification needed.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -65,16 +51,13 @@ async def _safe_run(source_id: int) -> None:
 
 
 def _source_id_from_event(event) -> str | None:
-    """Extract source_id from an APScheduler event whose job_id is 'source-N'."""
+    """get the source id back from the job name"""
     if not event.job_id or not event.job_id.startswith("source-"):
         return None
     return event.job_id[len("source-"):]
 
 
 def _on_job_missed(event) -> None:
-    """Scheduler tried to fire a job at its scheduled time but couldn't (e.g.
-    misfire_grace_time exceeded — usually means the system was paused or the
-    event loop was blocked)."""
     sid = _source_id_from_event(event)
     if sid is not None:
         polls_skipped_total.labels(source_id=sid, reason="misfire").inc()
@@ -82,9 +65,6 @@ def _on_job_missed(event) -> None:
 
 
 def _on_max_instances_blocked(event) -> None:
-    """Previous run is still in flight when the next cron tick fires. Our
-    `max_instances=1` config means the new tick is dropped — the in-flight
-    poll wins. Surfaces as poll-skipped-because-pile-up."""
     sid = _source_id_from_event(event)
     if sid is not None:
         polls_skipped_total.labels(source_id=sid, reason="max_instances_blocked").inc()
