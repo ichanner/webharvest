@@ -48,6 +48,4 @@ then open
 
 ## more detail
 
-the paper has the full architecture and screenshots
-
-`SWOT_ANALYSIS.md` has the rubric style tool writeup
+the paper has the full architecture and screenshots and swot analysis
